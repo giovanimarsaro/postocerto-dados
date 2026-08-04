@@ -28,7 +28,6 @@ ALIAS_PRODUTOS = {
 def achar_link_planilha_mais_recente():
     resp = requests.get(PAGINA_ANP, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
     resp.raise_for_status()
-    # procura o primeiro link "resumo_semanal_lpc...xlsx" (a pagina lista da semana mais nova pra mais antiga)
     matches = re.findall(r'href="([^"]*resumo[_-]semanal[_-]lpc[^"]*\.xlsx)"', resp.text, re.IGNORECASE)
     if not matches:
         raise RuntimeError("Nao encontrei nenhum link de planilha na pagina da ANP. O layout pode ter mudado.")
@@ -52,39 +51,48 @@ def extrair_medias_nacionais(caminho_planilha):
 
     wb = openpyxl.load_workbook(caminho_planilha, data_only=True)
     resultado = {}
+    resultado_fallback = {}
 
     for aba in wb.sheetnames:
         ws = wb[aba]
         linhas = list(ws.iter_rows(values_only=True))
-        if not linhas:
-            continue
-        cabecalho = [str(c).strip().upper() if c else "" for c in linhas[0]]
 
-        col_produto = next((i for i, c in enumerate(cabecalho) if "PRODUTO" in c), None)
-        col_regiao = next((i for i, c in enumerate(cabecalho) if c in ("ESTADO", "REGIAO", "REGIÃO", "MUNICIPIO", "MUNICÍPIO", "ABRANGENCIA", "ABRANGÊNCIA")), None)
-        col_preco = next((i for i, c in enumerate(cabecalho) if "PRECO MEDIO REVENDA" in c or "PREÇO MÉDIO REVENDA" in c or "PRECO MEDIO" in c or "PREÇO MÉDIO" in c), None)
-
-        if col_produto is None or col_preco is None:
-            continue
-
-        for linha in linhas[1:]:
-            if len(linha) <= max(col_produto, col_preco):
+        for linha in linhas:
+            if not linha:
                 continue
-            produto = str(linha[col_produto]).strip().upper() if linha[col_produto] else ""
-            # se a planilha tiver coluna de regiao, so aceitamos a linha "BRASIL" (media nacional)
-            if col_regiao is not None:
-                regiao = str(linha[col_regiao]).strip().upper() if linha[col_regiao] else ""
-                if regiao and regiao != "BRASIL":
+            textos = [str(c).strip().upper() if isinstance(c, str) else "" for c in linha]
+            tem_brasil = "BRASIL" in textos
+
+            for idx, texto in enumerate(textos):
+                if not texto:
                     continue
-            preco = linha[col_preco]
-            if not isinstance(preco, (int, float)):
-                continue
-            for chave, aliases in ALIAS_PRODUTOS.items():
-                if produto in aliases and chave not in resultado:
-                    resultado[chave] = round(float(preco), 3)
+                chave_produto = None
+                for chave, aliases in ALIAS_PRODUTOS.items():
+                    if any(texto == a or texto.startswith(a) for a in aliases):
+                        chave_produto = chave
+                        break
+                if chave_produto is None:
+                    continue
+
+                preco_achado = None
+                for c in linha[idx + 1:]:
+                    if isinstance(c, (int, float)) and 0.5 <= float(c) <= 20:
+                        preco_achado = round(float(c), 3)
+                        break
+                if preco_achado is None:
+                    continue
+
+                if tem_brasil and chave_produto not in resultado:
+                    resultado[chave_produto] = preco_achado
+                elif chave_produto not in resultado_fallback:
+                    resultado_fallback[chave_produto] = preco_achado
 
         if len(resultado) == 3:
             break
+
+    for chave in ALIAS_PRODUTOS:
+        if chave not in resultado and chave in resultado_fallback:
+            resultado[chave] = resultado_fallback[chave]
 
     faltando = [k for k in ALIAS_PRODUTOS if k not in resultado]
     if faltando:
@@ -125,7 +133,6 @@ def main():
         if anterior:
             print("Mantendo o arquivo anterior sem alteracoes.")
         else:
-            # primeira execucao e falhou: cria um arquivo com valores de referencia neutros
             dados = {
                 "gasolina": 6.09, "etanol": 4.42, "diesel": 6.31,
                 "fonte": "valor inicial (robo ainda nao conseguiu buscar da ANP)",
