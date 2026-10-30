@@ -1,7 +1,7 @@
 {
-  "gasolina": 6.7,
+  "gasolina": 6.67,
   "etanol": 4.11,
-  "diesel": 7.0,
-  "fonte": "https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos/arquivos-lpc/2026/resumo_semanal_lpc_2026_10_11-2026_10_17.xlsx",
-  "atualizado_em": "2026-10-23T18:51:55.046491+00:00"
+  "diesel": 6.99,
+  "fonte": "https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos/arquivos-lpc/2026/resumo_semanal_lpc_2026_10_18-2026_10_24.xlsx",
+  "atualizado_em": "2026-10-30T19:49:43.754276+00:00"
 }
